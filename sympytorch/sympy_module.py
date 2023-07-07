@@ -104,6 +104,10 @@ class _Node(torch.nn.Module):
             self._name = expr.name
             self._torch_func = lambda value: value
             self._args = ((lambda memodict: memodict[expr.name]),)
+        elif isinstance(expr.func, sympy.core.function.UndefinedFunction):
+            self._name = expr.name
+            self._torch_func = lambda value: value
+            self._args = ((lambda memodict: memodict[expr.name]),) 
         else:
             self._torch_func = _func_lookup[expr.func]
             args = []
@@ -131,6 +135,8 @@ class _Node(torch.nn.Module):
             else:
                 return self._sympy_func(self._numerator.item(), self._denominator.item())
         elif issubclass(self._sympy_func, sympy.Symbol):
+            return self._sympy_func(self._name)
+        elif isinstance(self._sympy_func, sympy.core.function.UndefinedFunction):
             return self._sympy_func(self._name)
         elif issubclass(self._sympy_func, sympy.core.numbers.ImaginaryUnit):
             return sympy.I
