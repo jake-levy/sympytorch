@@ -76,28 +76,28 @@ _global_func_lookup.update({s: ft.partial(number_symbol_to_torch, s()) for s in 
 
 
 class _Node(torch.nn.Module):
-    def __init__(self, *, expr, _memodict, _func_lookup, **kwargs):
+    def __init__(self, *, expr, _memodict, _func_lookup, device='cpu', **kwargs):
         super().__init__(**kwargs)
 
         self._sympy_func = expr.func
 
         if issubclass(expr.func, sympy.Float):
-            self._value = torch.nn.Parameter(torch.tensor(float(expr)))
+            self._value = torch.nn.Parameter(torch.tensor(float(expr), device=device))
             self._torch_func = lambda: self._value
             self._args = ()
         elif issubclass(expr.func, sympy.Integer):
-            self._value = int(expr)
+            self._value = torch.tensor(int(expr), device=device)
             self._torch_func = lambda: self._value
             self._args = ()
         elif issubclass(expr.func, sympy.Rational):
-            self.register_buffer('_numerator', torch.tensor(expr.p, dtype=torch.get_default_dtype()))
-            self.register_buffer('_denominator', torch.tensor(expr.q, dtype=torch.get_default_dtype()))
+            self.register_buffer('_numerator', torch.tensor(expr.p, dtype=torch.get_default_dtype(), device=device))
+            self.register_buffer('_denominator', torch.tensor(expr.q, dtype=torch.get_default_dtype(), device=device))
             self._torch_func = lambda: self._numerator / self._denominator
             self._args = ()
         elif issubclass(expr.func, sympy.UnevaluatedExpr):
             if len(expr.args) != 1 or not issubclass(expr.args[0].func, sympy.Float):
                 raise ValueError("UnevaluatedExpr should only be used to wrap floats.")
-            self.register_buffer('_value', torch.tensor(float(expr.args[0])))
+            self.register_buffer('_value', torch.tensor(float(expr.args[0]), device=device))
             self._torch_func = lambda: self._value
             self._args = ()
         elif issubclass(expr.func, sympy.Symbol):
@@ -128,7 +128,7 @@ class _Node(torch.nn.Module):
         elif issubclass(self._sympy_func, (type(sympy.S.NegativeOne), type(sympy.S.One), type(sympy.S.Zero))):
             return self._sympy_func()
         elif issubclass(self._sympy_func, sympy.Integer):
-            return self._sympy_func(self._value)
+            return self._sympy_func(self._value.item())
         elif issubclass(self._sympy_func, sympy.Rational):
             if issubclass(self._sympy_func, type(sympy.S.Half)):
                 return sympy.S.Half
@@ -170,7 +170,7 @@ class _Node(torch.nn.Module):
 
 
 class SymPyModule(torch.nn.Module):
-    def __init__(self, *, expressions, extra_funcs=None, **kwargs):
+    def __init__(self, *, expressions, device='cpu', extra_funcs=None, **kwargs):
         super().__init__(**kwargs)
 
         expressions = tuple(expressions)
@@ -181,7 +181,7 @@ class SymPyModule(torch.nn.Module):
 
         _memodict = {}
         self._nodes = torch.nn.ModuleList(
-            [_Node(expr=expr, _memodict=_memodict, _func_lookup=_func_lookup) for expr in expressions]
+            [_Node(expr=expr, _memodict=_memodict, _func_lookup=_func_lookup, device=device).to(device) for expr in expressions]
         )
         self._expressions_string = str(expressions)
 
